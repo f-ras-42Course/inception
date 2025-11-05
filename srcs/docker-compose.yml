@@ -1,0 +1,93 @@
+services:
+  # 1. MariaDB Service
+  mariadb:
+    build:
+      context: ./requirements/mariadb
+      dockerfile: Dockerfile
+    image: mariadb # Image name must match service name
+    container_name: mariadb
+    env_file: .env # Loads all variables from my .env file
+    secrets: 
+      - db_root_password
+      - db_admin_password
+      - db_user_password
+    volumes:
+      - db-data:/var/lib/mysql # Mounts the named volume 'db-data'
+    networks:
+      - inception-net
+    restart: always
+
+  # 2. WordPress Service
+  wordpress:
+    build:
+      context: ./requirements/wordpress
+      dockerfile: Dockerfile
+    image: wordpress
+    container_name: wordpress
+    env_file: .env
+    secrets:
+      - wp_admin_password
+      - wp_user_password
+      - db_admin_password
+    volumes:
+      - wp-files:/var/www/html # Mounts the named volume 'wp-files'
+    networks:
+      - inception-net
+    depends_on:
+      - mariadb # Tells Docker to start mariadb before wordpress
+    restart: always
+
+  # 3. NGINX Service
+  nginx:
+    build:
+      context: ./requirements/nginx
+      dockerfile: Dockerfile
+      args:
+        # Passes the DOMAIN_NAME to the Dockerfile for cert generation
+        - DOMAIN_NAME=${DOMAIN_NAME}
+    image: nginx
+    container_name: nginx
+    env_file: .env
+    volumes:
+      - wp-files:/var/www/html # NGINX needs read-access to the WP files
+    ports:
+      - "443:443" # Exposes port 443 to the host machine 
+    networks:
+      - inception-net
+    depends_on:
+      - wordpress
+    restart: always
+
+# Define the network
+networks:
+  inception-net:
+    driver: bridge
+
+# Define the volumes
+volumes:
+  db-data:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      # Mounts the volume to a specific path on the host
+      device: '/home/fras/data/db'
+  wp-files:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: '/home/fras/data/wp'
+
+# Define the secrets
+secrets:
+  db_root_password:
+    file: ../secrets/db_root_password.txt
+  db_admin_password:
+    file: ../secrets/db_admin_password.txt
+  db_user_password:
+    file: ../secrets/db_user_password.txt
+  wp_admin_password:
+    file: ../secrets/wp_admin_password.txt
+  wp_user_password:
+    file: ../secrets/wp_user_password.txt
