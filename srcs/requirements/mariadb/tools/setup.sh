@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e # Exit immediately if a command exits.
 
+# Create the /run/mysqld directory for the socket
+echo "Ensuring /run/mysqld directory exists..."
+mkdir -p /run/mysqld
+chown -R mysql:mysql /run/mysqld
+
 # Paths to secret files
 DB_ROOT_PASSWORD_FILE="/run/secrets/db_root_password"
 DB_ADMIN_PASSWORD_FILE="/run/secrets/db_admin_password"
@@ -16,14 +21,14 @@ if [ -d "/var/lib/mysql/$DB_NAME" ]; then
     echo "Database '$DB_NAME' already exists. Skipping initialization."
 else
     echo "Database '$DB_NAME' not found. Initializing..."
+    
+    # Read passwords from secrets
+    DB_ROOT_PASSWORD=$(cat "/run/secrets/db_root_password")
+    DB_ADMIN_PASSWORD=$(cat "/run/secrets/db_admin_password")
+    DB_USER_PASSWORD=$(cat "/run/secrets/db_user_password")
 
     # Initialize MariaDB data directory
     mariadb-install-db --user=mysql --datadir=/var/lib/mysql
-    
-    # Create the /run/mysqld directory for the socket
-    echo "Creating /run/mysqld directory..."
-    mkdir -p /run/mysqld
-    chown -R mysql:mysql /run/mysqld
 
     # Start MariaDB in the background temporarily
     mariadbd --user=mysql --datadir=/var/lib/mysql &
@@ -46,7 +51,7 @@ else
 
     # Create database and users using SQL
     # Using environment variables from the .env file
-    mysql <<-EOF
+    mariadb <<-EOF
         ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
         CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`;
         CREATE USER IF NOT EXISTS '${DB_USER}'@'%' IDENTIFIED BY '${DB_USER_PASSWORD}';
